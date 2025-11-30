@@ -32,9 +32,23 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
     <div className="relative w-full h-full flex flex-col border-t md:border-t-0 md:border-l bg-[var(--bg-app)] border-[var(--border-color)]">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 bg-[var(--bg-panel)] border-b border-[var(--border-color)] text-xs font-semibold text-[var(--fg-secondary)] shrink-0">
-        <span>GLSL FRAGMENT SHADER</span>
+        <div className="flex items-center gap-3">
+          <span>GLSL FRAGMENT SHADER</span>
+        </div>
         <span className="flex items-center gap-2">
-           <kbd className="hidden md:inline-block px-2 py-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded text-[var(--fg-primary)]">Ctrl + Enter</kbd> to compile
+           <kbd className="hidden md:inline-block px-2 py-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded text-[var(--fg-primary)]">Ctrl + Enter</kbd> 
+           to 
+           <button 
+             type="button"
+             onClick={(e) => {
+               e.preventDefault();
+               onRun();
+             }}
+             className="hover:text-[var(--accent)] hover:underline cursor-pointer focus:outline-none transition-colors"
+             title="Click to compile"
+           >
+             compile
+           </button>
         </span>
       </div>
 

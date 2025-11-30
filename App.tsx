@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Play, Pause, RefreshCw, Layers, Terminal, Sparkles, Image as ImageIcon, Send, AlertCircle, Maximize2, Minimize2, Palette, ChevronDown, Upload } from 'lucide-react';
+import { Play, Pause, RefreshCw, Layers, Terminal, Sparkles, Image as ImageIcon, Send, AlertCircle, Maximize2, Minimize2, Palette, ChevronDown, Upload, FileCode } from 'lucide-react';
 import ShaderCanvas from './components/ShaderCanvas';
 import Editor from './components/Editor';
-import { DEFAULT_SHADER, Tab, TextureChannel } from './types';
+import { Tab, TextureChannel } from './types';
 import { generateShader, debugShader } from './services/geminiService';
 import { THEMES } from './themes';
+import { EXAMPLES } from './examples';
 
 // Default texture for testing
 const DEFAULT_TEXTURES = [
@@ -14,8 +15,8 @@ const DEFAULT_TEXTURES = [
 ];
 
 function App() {
-  const [code, setCode] = useState(DEFAULT_SHADER);
-  const [activeCode, setActiveCode] = useState(DEFAULT_SHADER); // Code actually running in shader
+  const [code, setCode] = useState(EXAMPLES.default.code);
+  const [activeCode, setActiveCode] = useState(EXAMPLES.default.code); // Code actually running in shader
   const [isPlaying, setIsPlaying] = useState(true);
   const [time, setTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -33,9 +34,21 @@ function App() {
   const [currentThemeKey, setCurrentThemeKey] = useState<string>("dieselpunk");
   const [isThemeOpen, setIsThemeOpen] = useState(false);
 
+  // Examples State
+  const [isExamplesOpen, setIsExamplesOpen] = useState(false);
+
   // Fullscreen State
   const previewRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Layout State
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50); // Percentage
+  const [previewHeight, setPreviewHeight] = useState(100); // Percentage
+  const [isResizing, setIsResizing] = useState(false);
+  
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const dragType = useRef<'vertical' | 'horizontal' | null>(null);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -60,6 +73,16 @@ function App() {
     setActiveCode(code);
     setError(null); // Clear previous errors, canvas will set new ones if any
   }, [code]);
+
+  const handleLoadExample = (key: string) => {
+    const example = EXAMPLES[key];
+    if (example) {
+      setCode(example.code);
+      setActiveCode(example.code);
+      setError(null);
+      setIsExamplesOpen(false);
+    }
+  };
 
   const handleShaderError = useCallback((err: string | null) => {
     setError(err);
@@ -117,6 +140,54 @@ function App() {
     }
   };
 
+  // Resize Handlers
+  const startVerticalResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragType.current = 'vertical';
+    setIsResizing(true);
+    document.body.style.cursor = 'col-resize';
+  };
+
+  const startHorizontalResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragType.current = 'horizontal';
+    setIsResizing(true);
+    document.body.style.cursor = 'row-resize';
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragType.current || !mainContainerRef.current) return;
+
+      if (dragType.current === 'vertical') {
+        const containerRect = mainContainerRef.current.getBoundingClientRect();
+        const newWidthPct = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+        // Clamp between 0% and 90%
+        setLeftPanelWidth(Math.max(0, Math.min(90, newWidthPct)));
+      } else if (dragType.current === 'horizontal' && leftPanelRef.current) {
+        const panelRect = leftPanelRef.current.getBoundingClientRect();
+        const newHeightPct = ((e.clientY - panelRect.top) / panelRect.height) * 100;
+        // Clamp between 10% and 100%
+        setPreviewHeight(Math.max(10, Math.min(100, newHeightPct)));
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (dragType.current) {
+        dragType.current = null;
+        setIsResizing(false);
+        document.body.style.cursor = '';
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   // Construct CSS variables based on current theme
   const theme = THEMES[currentThemeKey];
   const themeStyles = {
@@ -160,6 +231,35 @@ function App() {
         </div>
 
         <div className="flex gap-2 items-center">
+           {/* Examples Dropdown */}
+           <div className="relative">
+             <button
+                onClick={() => setIsExamplesOpen(!isExamplesOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:bg-[var(--bg-app)] transition-colors border border-transparent hover:border-[var(--border-color)] text-xs font-medium"
+             >
+                <FileCode size={14} />
+                <span className="hidden xl:inline">Examples</span>
+                <ChevronDown size={12} />
+             </button>
+             
+             {isExamplesOpen && (
+               <>
+                 <div className="fixed inset-0 z-10" onClick={() => setIsExamplesOpen(false)} />
+                 <div className="absolute top-full right-0 mt-2 w-56 max-h-[80vh] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-xl z-20 py-2">
+                    {Object.entries(EXAMPLES).map(([key, ex]) => (
+                      <button
+                        key={key}
+                        onClick={() => handleLoadExample(key)}
+                        className="w-full text-left px-4 py-2 text-xs hover:bg-[var(--bg-app)] text-[var(--fg-primary)] transition-colors"
+                      >
+                        {ex.name}
+                      </button>
+                    ))}
+                 </div>
+               </>
+             )}
+           </div>
+
            {/* Theme Dropdown */}
            <div className="relative">
              <button
@@ -217,39 +317,70 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-[var(--bg-app)]">
-        {/* Left: Preview */}
+      <div 
+        ref={mainContainerRef}
+        className="flex-1 flex flex-col md:flex-row overflow-hidden bg-[var(--bg-app)] relative"
+      >
+        {/* Left Panel (Preview) */}
         <div 
-          ref={previewRef}
-          className="w-full md:w-1/2 lg:w-3/5 h-[50vh] md:h-full relative bg-black group"
+          ref={leftPanelRef}
+          className="flex flex-col relative"
+          style={{ width: `${leftPanelWidth}%`, minWidth: '0px' }}
         >
-           <ShaderCanvas 
-             fragCode={activeCode} 
-             isPlaying={isPlaying} 
-             channels={channels}
-             onTimeUpdate={setTime}
-             onError={handleShaderError}
-           />
-           
-           {/* Floating Info */}
-           <div className="absolute top-4 left-4 pointer-events-none z-10">
-              <div className="text-xs text-white/50 font-mono">
-                {Math.round(1000 / 16)} FPS
-              </div>
+           <div 
+             className="relative bg-black group w-full"
+             style={{ height: `${previewHeight}%` }}
+           >
+               <div 
+                 ref={previewRef}
+                 className={`w-full h-full ${isResizing ? 'pointer-events-none' : ''}`}
+               >
+                 <ShaderCanvas 
+                   fragCode={activeCode} 
+                   isPlaying={isPlaying} 
+                   channels={channels}
+                   onTimeUpdate={setTime}
+                   onError={handleShaderError}
+                 />
+                 
+                 {/* Floating Info */}
+                 <div className="absolute top-4 left-4 pointer-events-none z-10">
+                    <div className="text-xs text-white/50 font-mono">
+                      {Math.round(1000 / 16)} FPS
+                    </div>
+                 </div>
+
+                 {/* Fullscreen Button */}
+                 <button
+                    onClick={toggleFullscreen}
+                    className="absolute bottom-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white/70 hover:text-white rounded-lg backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10"
+                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                 >
+                    {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+                 </button>
+               </div>
+
+               {/* Horizontal Resizer (Bottom of preview) */}
+               {!isFullscreen && (
+                 <div 
+                    className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize bg-[var(--border-color)] hover:bg-[var(--accent)] hover:h-1.5 transition-all z-20"
+                    onMouseDown={startHorizontalResize}
+                 />
+               )}
            </div>
 
-           {/* Fullscreen Button */}
-           <button
-              onClick={toggleFullscreen}
-              className="absolute bottom-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white/70 hover:text-white rounded-lg backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10"
-              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-           >
-              {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-           </button>
+           {/* Empty Space below preview (visible if previewHeight < 100%) */}
+           <div className="flex-1 bg-[var(--bg-app)]" />
         </div>
 
-        {/* Right: Tools/Editor */}
-        <div className="w-full md:w-1/2 lg:w-2/5 h-[50vh] md:h-full flex flex-col bg-[var(--bg-app)] border-l border-[var(--border-color)]">
+        {/* Vertical Resizer (Between panels) */}
+        <div 
+          className="w-1 cursor-col-resize bg-[var(--border-color)] hover:bg-[var(--accent)] hover:w-1.5 transition-all z-30 flex-shrink-0"
+          onMouseDown={startVerticalResize}
+        />
+
+        {/* Right Panel (Tools/Editor) */}
+        <div className="flex-1 h-full flex flex-col bg-[var(--bg-app)] overflow-hidden min-w-0">
            
            {/* Editor Tab */}
            <div className={`flex-1 flex flex-col ${activeTab === Tab.EDITOR ? 'block' : 'hidden'} overflow-hidden`}>
