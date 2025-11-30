@@ -1,0 +1,5 @@
+{
+  "name": "Copy of ShaderLab AI",
+  "description": "A Shadertoy-clone for learning and building live GLSL shaders, featuring integrated AI assistance for generation and debugging.",
+  "requestFramePermissions": []
+}
