@@ -53,3 +53,20 @@ export const debugShader = async (code: string, errorLog: string): Promise<strin
   
   return generateShader(prompt);
 };
+
+export const modifyShader = async (code: string, userRequest: string): Promise<string> => {
+  const prompt = `
+  Existing GLSL Code:
+  ${code}
+  
+  User Request:
+  ${userRequest}
+  
+  Task:
+  Update the existing code based on the user request. Maintain the logic unless asked to change. 
+  Return the FULL corrected/updated shader source (just the mainImage part). 
+  Do not explain, just provide the code.
+  `;
+  
+  return generateShader(prompt);
+};

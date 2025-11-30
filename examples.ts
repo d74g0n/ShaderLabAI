@@ -1,3 +1,4 @@
+
 export interface ExampleShader {
   name: string;
   code: string;
@@ -240,6 +241,16 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     } else {
         fragColor = vec4(0.0);
     }
+}`
+  },
+  ichannel0: {
+    name: "iChannel0",
+    code: `void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+	vec2 uv = fragCoord.xy / iResolution.xy*2.-1.;
+    vec2 uv2 = vec2(uv.x,1.0-uv.y);
+    vec4 t = texture2D(iChannel0, uv2);
+    fragColor = vec4(t.rgb, 1.0);
 }`
   }
 };

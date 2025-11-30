@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Play, Pause, RefreshCw, Layers, Terminal, Sparkles, Image as ImageIcon, Send, AlertCircle, Maximize2, Minimize2, Palette, ChevronDown, Upload, FileCode } from 'lucide-react';
+import { Play, Pause, RefreshCw, Layers, Terminal, Sparkles, Image as ImageIcon, Send, AlertCircle, Maximize2, Minimize2, Palette, ChevronDown, Upload, FileCode, Wand2 } from 'lucide-react';
 import ShaderCanvas from './components/ShaderCanvas';
 import Editor from './components/Editor';
 import { Tab, TextureChannel } from './types';
-import { generateShader, debugShader } from './services/geminiService';
+import { generateShader, debugShader, modifyShader } from './services/geminiService';
 import { THEMES } from './themes';
 import { EXAMPLES } from './examples';
 
@@ -125,6 +125,23 @@ function App() {
     }
   };
 
+  const handleAiModify = async () => {
+    if (!aiPrompt.trim()) return;
+    setIsAiLoading(true);
+    setAiResponse(null);
+    try {
+      const modified = await modifyShader(code, aiPrompt);
+      setCode(modified);
+      setActiveCode(modified);
+      setAiPrompt("");
+      setActiveTab(Tab.EDITOR);
+    } catch (e) {
+      setAiResponse("Error modifying shader. Please try again.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const handleAiDebug = async () => {
     if (!error) return;
     setIsAiLoading(true);
@@ -203,7 +220,7 @@ function App() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden transition-colors duration-300" style={themeStyles}>
       {/* Header */}
-      <header className="h-14 bg-[var(--bg-panel)] border-b border-[var(--border-color)] flex items-center justify-between px-4 shrink-0 z-20 relative">
+      <header className="h-14 bg-[var(--bg-panel)] border-b border-[var(--border-color)] flex items-center justify-between px-4 shrink-0 z-50 relative">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[var(--accent)] text-[var(--bg-app)]">
             <Sparkles size={18} />
@@ -245,7 +262,7 @@ function App() {
              {isExamplesOpen && (
                <>
                  <div className="fixed inset-0 z-10" onClick={() => setIsExamplesOpen(false)} />
-                 <div className="absolute top-full right-0 mt-2 w-56 max-h-[80vh] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-xl z-20 py-2">
+                 <div className="absolute top-full right-0 mt-2 w-56 max-h-[80vh] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-xl z-50 py-2">
                     {Object.entries(EXAMPLES).map(([key, ex]) => (
                       <button
                         key={key}
@@ -274,7 +291,7 @@ function App() {
              {isThemeOpen && (
                <>
                  <div className="fixed inset-0 z-10" onClick={() => setIsThemeOpen(false)} />
-                 <div className="absolute top-full right-0 mt-2 w-56 max-h-[80vh] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-xl z-20 py-2">
+                 <div className="absolute top-full right-0 mt-2 w-56 max-h-[80vh] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-xl z-50 py-2">
                     {Object.entries(THEMES).map(([key, t]) => (
                       <button
                         key={key}
@@ -464,9 +481,9 @@ function App() {
                        <Sparkles className="text-[var(--accent)]" size={24} />
                     </div>
                     <div>
-                      <h3 className="text-[var(--fg-primary)] font-semibold">AI Shader Generator</h3>
+                      <h3 className="text-[var(--fg-primary)] font-semibold">AI Shader Lab</h3>
                       <p className="text-[var(--fg-secondary)] text-sm mt-1 max-w-xs mx-auto">
-                        Describe what you want to see, and Gemini will generate the GLSL code for you.
+                        Create new shaders or refine the existing one using natural language.
                       </p>
                     </div>
                  </div>
@@ -479,21 +496,32 @@ function App() {
               )}
 
               <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-panel)]">
-                <div className="relative">
-                   <textarea
-                     value={aiPrompt}
-                     onChange={(e) => setAiPrompt(e.target.value)}
-                     placeholder="E.g., A rotating cube made of neon lights..."
-                     className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg pl-4 pr-12 py-3 text-sm text-[var(--fg-primary)] placeholder-[var(--fg-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] resize-none h-24 transition-all"
-                   />
+                 <textarea
+                   value={aiPrompt}
+                   onChange={(e) => setAiPrompt(e.target.value)}
+                   placeholder="Describe a new shader or changes to the current one..."
+                   className="w-full bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg px-4 py-3 text-sm text-[var(--fg-primary)] placeholder-[var(--fg-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] resize-none h-24 mb-3 transition-all"
+                 />
+                 <div className="flex gap-2">
                    <button 
                      onClick={handleAiGenerate}
                      disabled={isAiLoading || !aiPrompt}
-                     className="absolute bottom-3 right-3 p-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-[var(--bg-app)] rounded-md transition-colors"
+                     className="flex-1 py-2 bg-[var(--bg-app)] hover:bg-[var(--bg-panel)] border border-[var(--border-color)] hover:border-[var(--accent)] text-[var(--fg-primary)] rounded-md transition-colors flex items-center justify-center gap-2 text-xs font-medium"
+                     title="Generate a completely new shader from scratch"
                    >
-                     {isAiLoading ? <RefreshCw className="animate-spin" size={16} /> : <Send size={16} />}
+                     {isAiLoading ? <RefreshCw className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                     Generate New
                    </button>
-                </div>
+                   <button 
+                     onClick={handleAiModify}
+                     disabled={isAiLoading || !aiPrompt}
+                     className="flex-1 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--bg-app)] rounded-md transition-colors flex items-center justify-center gap-2 text-xs font-bold"
+                     title="Update the current code in the editor"
+                   >
+                     {isAiLoading ? <RefreshCw className="animate-spin" size={14} /> : <Wand2 size={14} />}
+                     Update Current
+                   </button>
+                 </div>
               </div>
            </div>
 
