@@ -14,9 +14,24 @@ const DEFAULT_TEXTURES = [
   "https://picsum.photos/512/512?blur"
 ];
 
+const DEFAULT_POST_CODE = `void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    vec2 uv = fragCoord.xy / iResolution.xy;
+    vec4 t = texture2D(Buffer, uv);
+    fragColor = vec4(t.rgb, 1.0);
+}`;
+
 function App() {
-  const [code, setCode] = useState(EXAMPLES.default.code);
-  const [activeCode, setActiveCode] = useState(EXAMPLES.default.code); // Code actually running in shader
+  // Codes for editing
+  const [bufferCode, setBufferCode] = useState(EXAMPLES.default.code);
+  const [postCode, setPostCode] = useState(DEFAULT_POST_CODE);
+
+  // Active codes for rendering
+  const [activeBufferCode, setActiveBufferCode] = useState(EXAMPLES.default.code);
+  const [activePostCode, setActivePostCode] = useState(DEFAULT_POST_CODE);
+
+  const [activeEditorTab, setActiveEditorTab] = useState<'buffer' | 'post'>('buffer');
+
   const [isPlaying, setIsPlaying] = useState(true);
   const [time, setTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -70,17 +85,26 @@ function App() {
   };
 
   const handleCompile = useCallback(() => {
-    setActiveCode(code);
-    setError(null); // Clear previous errors, canvas will set new ones if any
-  }, [code]);
+    setActiveBufferCode(bufferCode);
+    setActivePostCode(postCode);
+    setError(null); 
+  }, [bufferCode, postCode]);
 
   const handleLoadExample = (key: string) => {
     const example = EXAMPLES[key];
     if (example) {
-      setCode(example.code);
-      setActiveCode(example.code);
+      setBufferCode(example.code);
+      setActiveBufferCode(example.code);
+      // Reset post code when loading example, or keep it? 
+      // User likely expects example to replace main buffer.
+      // We will keep post code as is or reset to default if needed. 
+      // For now, let's reset to default to ensure a clean state.
+      setPostCode(DEFAULT_POST_CODE);
+      setActivePostCode(DEFAULT_POST_CODE);
+      
       setError(null);
       setIsExamplesOpen(false);
+      setActiveEditorTab('buffer');
     }
   };
 
@@ -108,14 +132,22 @@ function App() {
     reader.readAsDataURL(file);
   };
 
+  const getCurrentEditorCode = () => activeEditorTab === 'buffer' ? bufferCode : postCode;
+  const setCurrentEditorCode = (newCode: string) => activeEditorTab === 'buffer' ? setBufferCode(newCode) : setPostCode(newCode);
+
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim()) return;
     setIsAiLoading(true);
     setAiResponse(null);
     try {
       const generated = await generateShader(aiPrompt);
-      setCode(generated);
-      setActiveCode(generated);
+      setCurrentEditorCode(generated);
+      // If we generated code, we likely want to see it run immediately? 
+      // Usually better to let user compile manually or auto-compile.
+      // We'll mimic old behavior and auto-compile for them:
+      if (activeEditorTab === 'buffer') setActiveBufferCode(generated);
+      else setActivePostCode(generated);
+
       setAiPrompt("");
       setActiveTab(Tab.EDITOR);
     } catch (e) {
@@ -130,9 +162,13 @@ function App() {
     setIsAiLoading(true);
     setAiResponse(null);
     try {
-      const modified = await modifyShader(code, aiPrompt);
-      setCode(modified);
-      setActiveCode(modified);
+      const current = getCurrentEditorCode();
+      const modified = await modifyShader(current, aiPrompt);
+      setCurrentEditorCode(modified);
+      
+      if (activeEditorTab === 'buffer') setActiveBufferCode(modified);
+      else setActivePostCode(modified);
+
       setAiPrompt("");
       setActiveTab(Tab.EDITOR);
     } catch (e) {
@@ -146,9 +182,30 @@ function App() {
     if (!error) return;
     setIsAiLoading(true);
     try {
-      const fixed = await debugShader(activeCode, error);
-      setCode(fixed);
-      setActiveCode(fixed);
+      // Determine which code caused error based on error string prefix [Buffer] or [Post Effects]
+      // Default to current tab if unclear, or try to be smart.
+      let targetCode = activeEditorTab === 'buffer' ? activeBufferCode : activePostCode;
+      
+      if (error.includes('[Buffer]')) targetCode = activeBufferCode;
+      if (error.includes('[Post Effects]')) targetCode = activePostCode;
+
+      const fixed = await debugShader(targetCode, error);
+      
+      if (error.includes('[Buffer]')) {
+          setBufferCode(fixed);
+          setActiveBufferCode(fixed);
+          setActiveEditorTab('buffer');
+      } else if (error.includes('[Post Effects]')) {
+          setPostCode(fixed);
+          setActivePostCode(fixed);
+          setActiveEditorTab('post');
+      } else {
+          // Fallback
+          setCurrentEditorCode(fixed);
+          if (activeEditorTab === 'buffer') setActiveBufferCode(fixed);
+          else setActivePostCode(fixed);
+      }
+
       setActiveTab(Tab.EDITOR);
     } catch (e) {
       setError("AI Debugging failed. " + String(e));
@@ -353,7 +410,8 @@ function App() {
                  className={`w-full h-full ${isResizing ? 'pointer-events-none' : ''}`}
                >
                  <ShaderCanvas 
-                   fragCode={activeCode} 
+                   bufferCode={activeBufferCode}
+                   postCode={activePostCode}
                    isPlaying={isPlaying} 
                    channels={channels}
                    onTimeUpdate={setTime}
@@ -402,10 +460,16 @@ function App() {
            {/* Editor Tab */}
            <div className={`flex-1 flex flex-col ${activeTab === Tab.EDITOR ? 'block' : 'hidden'} overflow-hidden`}>
              <Editor 
-               code={code} 
-               onChange={setCode} 
+               code={activeEditorTab === 'buffer' ? bufferCode : postCode} 
+               onChange={setCurrentEditorCode} 
                onRun={handleCompile}
                error={error}
+               tabs={[
+                   { id: 'buffer', label: 'Buffer' }, 
+                   { id: 'post', label: 'Post Effects' }
+               ]}
+               activeTab={activeEditorTab}
+               onTabChange={(id) => setActiveEditorTab(id as 'buffer' | 'post')}
              />
              {error && (
                <div className="bg-[var(--bg-panel)] p-2 border-t border-[var(--border-color)] flex justify-end shrink-0">

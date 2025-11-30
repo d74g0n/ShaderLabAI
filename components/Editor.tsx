@@ -1,13 +1,29 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 
+interface TabItem {
+  id: string;
+  label: string;
+}
+
 interface EditorProps {
   code: string;
   onChange: (code: string) => void;
   onRun: () => void;
   error?: string | null;
+  tabs?: TabItem[];
+  activeTab?: string;
+  onTabChange?: (id: string) => void;
 }
 
-const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
+const Editor: React.FC<EditorProps> = ({ 
+  code, 
+  onChange, 
+  onRun, 
+  error,
+  tabs,
+  activeTab,
+  onTabChange
+}) => {
   const [lines, setLines] = useState(1);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -21,6 +37,11 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
   useEffect(() => {
     setLines(code.split('\n').length);
   }, [code]);
+
+  // Clear history when switching tabs to avoid undoing into a different file
+  useEffect(() => {
+    historyRef.current = [];
+  }, [activeTab]);
 
   // Helper to save history
   const snapshot = () => {
@@ -107,10 +128,6 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
 
       const { start, end } = getSelectedLinesRange(textarea);
       
-      // If there is a selection spanning multiple chars, we might want to indent lines
-      // But standard editor behavior: Tab at cursor inserts spaces. 
-      // Selection Tab indents block. Shift+Tab unindents block.
-      
       if (e.shiftKey) {
         // UNINDENT
         const { lineStart, lineEnd } = getSelectedLinesRange(textarea);
@@ -132,7 +149,6 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
 
       } else {
         // INDENT
-        // If single cursor, insert spaces
         if (start === end) {
             const newValue = code.substring(0, start) + "  " + code.substring(end);
             onChange(newValue);
@@ -166,10 +182,8 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
     }
 
     // --- REGULAR TYPING SNAPSHOT ---
-    // If key is a printable character (length 1) and not a command shortcut
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const now = Date.now();
-        // If it's been more than 1s since last snapshot, save state (start of new typing burst)
         if (now - lastSnapshotTimeRef.current > 1000) {
             snapshot();
             lastSnapshotTimeRef.current = now;
@@ -190,10 +204,8 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
     const start = textAreaRef.current.selectionStart;
     const end = textAreaRef.current.selectionEnd;
     
-    // Only highlight if there is a selection
     if (start !== end) {
         const selectedText = code.substring(start, end);
-        // Only highlight valid identifiers (alphanumeric + underscore)
         if (/^[a-zA-Z0-9_]+$/.test(selectedText)) {
             setHighlightWord(selectedText);
         } else {
@@ -206,16 +218,12 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
 
   // Generate backdrop HTML for highlighting
   const backdropHtml = useMemo(() => {
-    // Escape HTML characters to prevent rendering issues and XSS (though text is mostly code)
     const escapedCode = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     
     if (!highlightWord) {
-        // Add a zero-width space or newline at the end to match textarea height exactly
         return escapedCode + '\n';
     }
 
-    // Highlight all occurrences of the word
-    // using word boundary \b to ensure we don't match partial words
     const regex = new RegExp(`\\b(${highlightWord})\\b`, 'g');
     return escapedCode.replace(regex, '<span class="bg-white/20 rounded-[2px]">$1</span>') + '\n';
   }, [code, highlightWord]);
@@ -223,9 +231,23 @@ const Editor: React.FC<EditorProps> = ({ code, onChange, onRun, error }) => {
   return (
     <div className="relative w-full h-full flex flex-col border-t md:border-t-0 md:border-l bg-[var(--bg-app)] border-[var(--border-color)]">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[var(--bg-panel)] border-b border-[var(--border-color)] text-xs font-semibold text-[var(--fg-secondary)] shrink-0 z-20">
-        <div className="flex items-center gap-3">
-          <span>GLSL FRAGMENT SHADER</span>
+      <div className="flex items-center justify-between px-4 py-0 bg-[var(--bg-panel)] border-b border-[var(--border-color)] text-xs font-semibold text-[var(--fg-secondary)] shrink-0 z-20 h-10">
+        <div className="flex items-center h-full">
+          {tabs ? (
+            <div className="flex h-full">
+              {tabs.map(tab => (
+                 <button
+                    key={tab.id}
+                    onClick={() => onTabChange && onTabChange(tab.id)}
+                    className={`h-full px-4 border-r border-[var(--border-color)] transition-colors hover:bg-[var(--bg-app)] ${activeTab === tab.id ? 'bg-[var(--bg-app)] text-[var(--fg-primary)] border-t-2 border-t-[var(--accent)]' : 'bg-transparent border-t-2 border-t-transparent'}`}
+                 >
+                    {tab.label}
+                 </button>
+              ))}
+            </div>
+          ) : (
+            <span>GLSL FRAGMENT SHADER</span>
+          )}
         </div>
         <span className="flex items-center gap-2">
            <kbd className="hidden md:inline-block px-2 py-1 bg-[var(--bg-app)] border border-[var(--border-color)] rounded text-[var(--fg-primary)]">Ctrl + Enter</kbd> 
