@@ -1,4 +1,5 @@
 
+
 export interface ExampleShader {
   name: string;
   code: string;
@@ -251,6 +252,249 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv2 = vec2(uv.x,1.0-uv.y);
     vec4 t = texture2D(iChannel0, uv2);
     fragColor = vec4(t.rgb, 1.0);
+}`
+  },
+  blueMarble: {
+    name: "Blue Marble",
+    code: `float sdSphere(vec3 p, float r) {
+    return length(p) - r;
+}
+
+vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+float snoise3(vec3 v) {
+    const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+    vec3 i  = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + 2.0*C.xxx;
+    vec3 x3 = x0 - 1.0 + 3.0*C.xxx;
+    i = mod289(i);
+    vec4 p = permute(permute(permute(
+                i.z + vec4(0.0, i1.z, i2.z, 1.0))
+              + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+              + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857; // 1/7
+    vec3 ns = n_ * vec3(1.0,1.0,1.0) - vec3(0.0,0.0,0.0);
+    vec4 j = p - 49.0*floor(p*ns.z*ns.z);
+    vec4 x_ = floor(j*ns.z);
+    vec4 y_ = floor(j - 7.0*x_);
+    vec4 x = x_*ns.x + ns.y;
+    vec4 y = y_*ns.x + ns.y;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0)*2.0 + 1.0;
+    vec4 s1 = floor(b1)*2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+    vec3 p0 = vec3(a0.xy,h.x);
+    vec3 p1 = vec3(a0.zw,h.y);
+    vec3 p2 = vec3(a1.xy,h.z);
+    vec3 p3 = vec3(a1.zw,h.w);
+    vec4 norm = inversesqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+
+
+
+// Fractional Brownian Motion (FBM)
+float fbm(vec3 p) {
+    float sum = 0.0;
+    float amp = 0.5;
+    float freq = 0.5;
+    for (int i = 0; i < 5; i++) {
+        sum += amp * snoise3(p * freq);
+        freq *= 2.0;
+        amp *= 0.5;
+    }
+
+    
+    float sum2 = 0.0;
+    amp = 0.5;
+    freq = 1.5;
+    for (int i = 0; i < 5; i++) {
+        sum2 += amp * snoise3(p * freq);
+        freq *= 2.2;
+        amp *= 0.5;
+    }    
+
+
+    return sum+sum2;
+
+
+}
+
+// Planet parameters
+const float PLANET_RADIUS = 1.0;
+const float CLOUD_ALTITUDE = 0.5; // Clouds slightly above surface
+const float ATMOSPHERE_THICKNESS = 0.05; // Atmosphere extends from radius to radius + thickness
+
+// Noise scales
+const float LAND_NOISE_SCALE = 2.0;
+const float CLOUD_NOISE_SCALE = 2.0;
+
+// Noise thresholds/levels (fbm returns values roughly -0.5 to 0.5 for 5 octaves)
+const float WATER_LEVEL = 0.05; 
+const float LAND_LEVEL_START = -0.5;
+const float LAND_LEVEL_END = 0.7;
+
+// Colors
+const vec3 WATER_DEEP_COLOR = vec3(0.05, 0.1, 0.5);
+const vec3 WATER_SHALLOW_COLOR = vec3(0.1, 0.1, 0.4);
+const vec3 LAND_COLOR_LOW = vec3(0.3, 0.3, 0.1);
+const vec3 LAND_COLOR_HIGH = vec3(0.2, 0.2, 0.1);
+const vec3 SNOW_COLOR = vec3(0.1, 0.1, 0.95);
+const vec3 CLOUD_COLOR = vec3(0.95, 0.95, 0.95);
+const vec3 ATMOSPHERE_COLOR = vec3(0.3, 0.6, 1.0); // Blue-ish atmosphere
+
+// Animation speeds
+const float PLANET_NOISE_SPEED = 0.0005;
+const float CLOUD_NOISE_SPEED = 0.08;
+
+// Compute normal at a point
+vec3 getNormal(vec3 p) {
+    float eps = 0.0001;
+    // The SDF for the planet surface is sdSphere(p, PLANET_RADIUS)
+    return normalize(vec3(
+        sdSphere(p + vec3(eps,0,0), PLANET_RADIUS) - sdSphere(p - vec3(eps,0,0), PLANET_RADIUS),
+        sdSphere(p + vec3(0,eps,0), PLANET_RADIUS) - sdSphere(p - vec3(0,eps,0), PLANET_RADIUS),
+        sdSphere(p + vec3(0,0,eps), PLANET_RADIUS) - sdSphere(p - vec3(0,0,eps), PLANET_RADIUS)
+    ));
+}
+
+// Raymarching
+float rayMarch(vec3 ro, vec3 rd) {
+    float t = 0.0;
+    const float MAX_DIST = 100.0;
+    const int MAX_STEPS = 100;
+    const float SURF_DIST = 0.005;
+
+    for(int i=0;i<MAX_STEPS;i++){
+        vec3 pos = ro + t*rd;
+        float dist = sdSphere(pos, PLANET_RADIUS); // Use PLANET_RADIUS
+        if(dist < SURF_DIST) return t;
+        t += dist;
+        if(t > MAX_DIST) break;
+    }
+    return -1.0; // No hit
+}
+
+// Get the base planet surface color (land, water, snow)
+vec3 getPlanetSurfaceColor(vec3 p, vec3 normal) {
+    // Add time-based offset for planet rotation effect
+    vec3 p_animated = p + vec3(0.0, iTime * PLANET_NOISE_SPEED, 0.0); 
+    float n = fbm(p_animated * LAND_NOISE_SCALE);
+
+    vec3 surfaceColor;
+    if (n < WATER_LEVEL) { // Water
+        float waterDepth = smoothstep(-0.5, WATER_LEVEL, n); // Normalize noise to 0-1 for depth mix
+        surfaceColor = mix(WATER_DEEP_COLOR, WATER_SHALLOW_COLOR, waterDepth);
+    } else { // Land
+        float landHeight = smoothstep(LAND_LEVEL_START, LAND_LEVEL_END, n); // Normalize noise to 0-1 for height mix
+        surfaceColor = mix(LAND_COLOR_LOW, LAND_COLOR_HIGH, landHeight);
+    }
+
+    // Add polar caps / snow based on Y-coordinate (or dot product with up vector)
+    float poleInfluence = pow(abs(p.y), 6.0); // Higher power for sharper caps
+    surfaceColor = mix(surfaceColor, SNOW_COLOR, poleInfluence);
+
+    return surfaceColor;
+}
+
+// Get cloud layer color, blending with existing surface color
+vec3 getCloudsColor(vec3 p, vec3 surfaceColor, vec3 lightDir, vec3 normal) {
+    // Sample clouds slightly above the surface
+    vec3 cloudSamplePos = p + normal * CLOUD_ALTITUDE;
+    vec3 cloud_p_animated = cloudSamplePos + vec3(0.0, iTime * CLOUD_NOISE_SPEED, 0.0);
+    float cloudDensity = fbm(cloud_p_animated * CLOUD_NOISE_SCALE);
+
+    const float CLOUD_THRESHOLD = -0.3; // Noise range is roughly -0.5 to 0.5
+    const float CLOUD_FEATHER = 0.98; // Smoothness of cloud edges
+
+    if (cloudDensity > CLOUD_THRESHOLD) {
+        float alpha = smoothstep(CLOUD_THRESHOLD, CLOUD_THRESHOLD + CLOUD_FEATHER, cloudDensity);
+        // Simple lighting for clouds, brighter than surface
+        vec3 litCloudColor = CLOUD_COLOR * max(0.0, dot(normal, lightDir)) * 1.0; 
+        return mix(surfaceColor, litCloudColor, alpha);
+    }
+    return surfaceColor;
+}
+
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 uv = (fragCoord - 0.5*iResolution.xy)/iResolution.y;
+    vec3 ro = vec3(0.0,0.0,5.0); // Ray origin (camera position)
+    vec3 rd = normalize(vec3(uv, -1.0)); // Ray direction
+
+    // Map mouse to light position
+    vec2 mouse = iMouse.xy / iResolution.xy; // mouse.xy from 0..1
+    vec3 lightPos = vec3(
+        (mouse.x - 0.5) * 10.0,  // x from -5 to 5
+        (-0.5 + mouse.y) * 10.0, // y from -5 to 5
+        5.0                       // fixed z
+    );
+    // Light direction from planet center (assuming planet at origin) to light source
+    vec3 lightDir = normalize(lightPos - vec3(0.0));
+
+    float t = rayMarch(ro, rd); // Raymarch to find closest surface hit
+
+    if(t > 0.0) { // Ray hit the planet surface
+        vec3 pos = ro + t*rd; // Hit position
+        vec3 normal = getNormal(pos); // Surface normal at hit position
+        vec3 viewDir = normalize(ro - pos); // Direction from hit point to camera
+
+        // 1. Get base planet surface color (land/water/snow)
+        vec3 finalColor = getPlanetSurfaceColor(pos, normal);
+
+        // 2. Apply diffuse lighting
+        float diff = max(dot(normal, lightDir), 0.0);
+        vec3 lightStrength = vec3(1.0,0.8,0.6) * diff; // Original light color and diffuse factor
+        finalColor *= lightStrength;
+
+        // 3. Add cloud layer
+        finalColor = getCloudsColor(pos, finalColor, lightDir, normal);
+
+        // 4. Add thin atmospheric glow (rim effect on the planet surface)
+        // This makes the edge of the planet slightly glow with atmospheric color
+        float atmosphereFresnel = pow(1.0 - max(0.0, dot(normal, viewDir)), 3.0); // Fresnel effect
+        vec3 atmosphericGlow = ATMOSPHERE_COLOR * atmosphereFresnel * 1.5; // Scale intensity
+        finalColor += atmosphericGlow; // Additive blend for glow
+
+        fragColor = vec4(finalColor, 1.0);
+    } else { // Ray missed the planet (background / space)
+        vec3 skyColor = vec3(0.02, 0.02, 0.05); // Deep space color
+        fragColor = vec4(skyColor, 1.0);
+
+        // Add atmospheric glow around the planet's silhouette
+        // Find the closest point of the ray to the planet center (origin)
+        float b = dot(ro, rd);
+        float t_closest = -b;
+        vec3 p_closest = ro + t_closest * rd;
+        float dist_closest = length(p_closest);
+
+        // If the ray passes through or near the atmosphere
+        if (dist_closest < PLANET_RADIUS + ATMOSPHERE_THICKNESS && t_closest > 0.0) {
+            // Calculate alpha for atmospheric glow based on distance to the planet
+            float alpha = smoothstep(PLANET_RADIUS + ATMOSPHERE_THICKNESS, PLANET_RADIUS, dist_closest);
+            // Stronger glow at grazing angles
+            alpha *= pow(1.0 - abs(dot(normalize(p_closest), rd)), 2.0); 
+            
+            fragColor.rgb += ATMOSPHERE_COLOR * alpha * 0.8; // Additive glow for background rays
+        }
+    }
 }`
   }
 };
